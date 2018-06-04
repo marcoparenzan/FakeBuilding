@@ -6,10 +6,11 @@ using System.Configuration;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using Pippo;
 
 namespace FakeTornello
 {
-    class Program
+    static class Program
     {
         private static string doorState = "closed";
         private static string doorName = "";
@@ -48,9 +49,9 @@ namespace FakeTornello
             );
 
             var twin = await client.GetTwinAsync();
-            if (!string.IsNullOrWhiteSpace((string)twin.Properties.Desired["doorName"]))
+            if (twin.IsDesiredPropertyEmpty("doorName"))
             {
-                doorName = (string)twin.Properties.Desired["doorName"];
+                doorName = twin.DesiredProperty("doorName");
                 Console.WriteLine($"DoorName is now {doorName}");
             }
 
