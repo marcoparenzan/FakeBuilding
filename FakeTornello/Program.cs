@@ -1,4 +1,5 @@
 ﻿using Microsoft.Azure.Devices.Client;
+using Microsoft.Azure.Devices.Shared;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Configuration;
@@ -10,6 +11,9 @@ namespace FakeTornello
 {
     class Program
     {
+        private static string doorState = "closed";
+        private static string doorName = "";
+
         static async Task Main(string[] args)
         {
             var builder = new ConfigurationBuilder()
@@ -26,6 +30,8 @@ namespace FakeTornello
                 )
             ;
 
+            doorName = deviceId;
+
             var transportType = TransportType.Mqtt;
             if (!string.IsNullOrWhiteSpace(configuration["transportType"]))
             {
@@ -40,6 +46,19 @@ namespace FakeTornello
                 authenticationMethod,
                 transportType
             );
+
+            var twin = await client.GetTwinAsync();
+            if (!string.IsNullOrWhiteSpace((string)twin.Properties.Desired["doorName"]))
+            {
+                doorName = (string)twin.Properties.Desired["doorName"];
+                Console.WriteLine($"DoorName is now {doorName}");
+            }
+
+            await client.SetDesiredPropertyUpdateCallbackAsync(async (tc, oc) =>
+            {
+                doorName = (string)tc["doorName"];
+                Console.WriteLine($"DoorName is now {doorName}");
+            }, null);
 
             Console.WriteLine($"Welcome to THE COMPANY");
             Console.WriteLine($"You are in front of the door {configuration["deviceId"]}");
@@ -56,9 +75,41 @@ namespace FakeTornello
                 var text = Encoding.UTF8.GetString(bytes);
 
                 Console.WriteLine($"Messaggio ricevuto: {text}");
+                var textParts = text.Split();
+                switch (textParts[0].ToLower())
+                {
+                    case "opendoor":
+                        await OpenDoor(client);
+                        break;
+                    case "closedoor":
+                        await CloseDoor(client);
+                        break;
+                    default:
+                        Console.WriteLine("Syntax error");
+                        break;
+                }
+
 
                 await client.CompleteAsync(message);
             }
+        }
+
+        private static async Task OpenDoor(DeviceClient client)
+        {
+            doorState = "open";
+            Console.WriteLine("Door is now open");
+            var coll = new TwinCollection();
+            coll["doorState"] = doorState;
+            await client.UpdateReportedPropertiesAsync(coll);
+        }
+
+        private static async Task CloseDoor(DeviceClient client)
+        {
+            doorState = "close";
+            Console.WriteLine("Door is now closed");
+            var coll = new TwinCollection();
+            coll["doorState"] = doorState;
+            await client.UpdateReportedPropertiesAsync(coll);
         }
     }
 }

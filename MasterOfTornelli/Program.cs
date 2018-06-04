@@ -1,4 +1,5 @@
 ﻿using Microsoft.Azure.Devices;
+using Microsoft.Azure.Devices.Shared;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.IO;
@@ -17,6 +18,10 @@ namespace MasterOfTornelli
 
             var configuration = builder.Build();
 
+            var registryManager =
+                RegistryManager.CreateFromConnectionString(
+                    configuration["IoTHubConnectionString"]);
+
             var serviceClient = 
                 ServiceClient.CreateFromConnectionString(
                     configuration["IoTHubConnectionString"]);
@@ -27,9 +32,9 @@ namespace MasterOfTornelli
             {
                 Console.Write("What do you want to do now? ");
                 var commandText = Console.ReadLine();
-                var commandParts = commandText.ToLower().Split();
+                var commandParts = commandText.Split();
 
-                switch (commandParts[0])
+                switch (commandParts[0].ToLower())
                 {
                     case "opendoor":
                         await OpenDoor(serviceClient, commandParts);
@@ -37,11 +42,36 @@ namespace MasterOfTornelli
                     case "closedoor":
                         await CloseDoor(serviceClient, commandParts);
                         break;
+                    case "doorstate":
+                        await DoorState(registryManager, commandParts);
+                        break;
+                    case "setdoorname":
+                        await SetDoorName(registryManager, commandParts);
+                        break;
                     default:
                         Console.WriteLine("Scrivi meglio, la prossima volta!");
                         break;
                 }
             }
+        }
+
+        private static async Task SetDoorName(RegistryManager registryManager, string[] commandParts)
+        {
+            var twin = 
+                await registryManager.GetTwinAsync(commandParts[2]);
+            twin.Properties.Desired["doorName"] = 
+                commandParts[1];
+            await registryManager.UpdateTwinAsync(
+                commandParts[2], twin, twin.ETag);
+        }
+
+        private static async Task DoorState(RegistryManager registryManager, string[] commandParts)
+        {
+            var twin = await registryManager.GetTwinAsync(commandParts[1]);
+
+            var doorState = (string) twin.Properties.Reported["doorState"];
+            if (doorState == null) doorState = "unknown";
+            Console.WriteLine($"Door {commandParts[1]} is {doorState}");
         }
 
         private static async Task OpenDoor(ServiceClient serviceClient, string[] commandParts)
